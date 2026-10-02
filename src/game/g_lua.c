@@ -1171,6 +1171,85 @@ static int _et_RemoveWeaponFromPlayer(lua_State *L)
 	Bot_Event_RemoveWeapon(ent->client->ps.clientNum, Bot_WeaponGameToBot(weapon));
 #endif
 
+	G_ClearWeaponBankOverride(clientnum, weapon);
+
+	return 1;
+}
+
+/**
+ * Assign a weapon to a number-key bank so it stacks/cycles with other items on that key.
+ * bank 0 clears the override (default weapBanks table). Banks 1-9 are typical key binds.
+ *
+ * @lua_def_prototype et.SetWeaponBank(clientNum, weapon, bank)
+ * @lua_def ---@param clientNum number
+ * @lua_def ---@param weapon number et.WP_*
+ * @lua_def ---@param bank number 0 to clear, or 1..9
+ * @lua_def ---@return boolean
+ */
+static int _et_SetWeaponBank(lua_State *L)
+{
+	int clientnum = (int)luaL_checkinteger(L, 1);
+	int weapon    = (int)luaL_checkinteger(L, 2);
+	int bank      = (int)luaL_checkinteger(L, 3);
+
+	lua_pushboolean(L, G_SetWeaponBankOverride(clientnum, weapon, bank) ? 1 : 0);
+	return 1;
+}
+
+/**
+ * Clear one weapon's bank override.
+ *
+ * @lua_def_prototype et.ClearWeaponBank(clientNum, weapon)
+ * @lua_def ---@return boolean
+ */
+static int _et_ClearWeaponBank(lua_State *L)
+{
+	int clientnum = (int)luaL_checkinteger(L, 1);
+	int weapon    = (int)luaL_checkinteger(L, 2);
+
+	lua_pushboolean(L, G_ClearWeaponBankOverride(clientnum, weapon) ? 1 : 0);
+	return 1;
+}
+
+/**
+ * Clear all weapon bank overrides for a client.
+ *
+ * @lua_def_prototype et.ClearWeaponBanks(clientNum)
+ */
+static int _et_ClearWeaponBanks(lua_State *L)
+{
+	int clientnum = (int)luaL_checkinteger(L, 1);
+
+	G_ClearWeaponBankOverrides(clientnum);
+	return 0;
+}
+
+/**
+ * Returns the bank override for a weapon (0 = default table).
+ *
+ * @lua_def_prototype et.GetWeaponBank(clientNum, weapon)
+ * @lua_def ---@return number
+ */
+static int _et_GetWeaponBank(lua_State *L)
+{
+	int       clientnum = (int)luaL_checkinteger(L, 1);
+	int       weapon    = (int)luaL_checkinteger(L, 2);
+	gentity_t *ent;
+
+	if (clientnum < 0 || clientnum >= level.maxclients || !IS_VALID_WEAPON(weapon))
+	{
+		lua_pushinteger(L, 0);
+		return 1;
+	}
+
+	ent = g_entities + clientnum;
+	if (!ent->client)
+	{
+		lua_pushinteger(L, 0);
+		return 1;
+	}
+
+	lua_pushinteger(L, ent->client->weaponBankOverride[weapon]);
 	return 1;
 }
 
@@ -2502,6 +2581,10 @@ static const luaL_Reg etlib[] =
 	{ "G_ResetXP",               _et_G_ResetXP               },
 	{ "AddWeaponToPlayer",       _et_AddWeaponToPlayer       },
 	{ "RemoveWeaponFromPlayer",  _et_RemoveWeaponFromPlayer  },
+	{ "SetWeaponBank",           _et_SetWeaponBank           },
+	{ "ClearWeaponBank",         _et_ClearWeaponBank         },
+	{ "ClearWeaponBanks",        _et_ClearWeaponBanks        },
+	{ "GetWeaponBank",           _et_GetWeaponBank           },
 	{ "GetCurrentWeapon",        _et_GetCurrentWeapon        },
 	// Entities
 	{ "G_CreateEntity",          _et_G_CreateEntity          },

@@ -421,6 +421,8 @@ extern const int aReinfSeeds[MAX_REINFSEEDS];
 #define CS_TEAMRESTRICTIONS             43     ///< Class restrictions have been changed
 #define CS_UPGRADERANGE                 44     ///< Upgrade range levels have been changed
 
+#define CS_WEAPONBANK_OVERRIDES         45     ///< legacyfork: Lua weapon→bank overrides (c:w:b tokens)
+
 #define CS_MODELS                       64
 #define CS_SOUNDS                       (CS_MODELS +               MAX_MODELS)              ///< 320 (256)
 #define CS_SHADERS                      (CS_SOUNDS +               MAX_SOUNDS)              ///< 576 (256)
@@ -912,6 +914,9 @@ typedef enum
 	WP_NUM_WEAPONS             ///< 56
 	///< NOTE: this cannot be larger than 64 for AI/player weapons!
 } weapon_t;
+
+#define MAX_WEAP_BANKS_MP       10
+#define MAX_WEAPS_IN_BANK_MP    18
 
 /**
  * @struct weaponStats_t

@@ -2396,6 +2396,8 @@ void CG_Init(int serverMessageNum, int serverCommandSequence, int clientNum, qbo
 
 	CG_SkillLevelsChanged();
 
+	CG_ParseWeaponBankOverrides();
+
 	trap_S_ClearLoopingSounds();
 	trap_S_ClearSounds(qfalse);
 

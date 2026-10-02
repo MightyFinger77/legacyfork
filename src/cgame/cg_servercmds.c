@@ -1054,6 +1054,9 @@ static void CG_ConfigStringModified(void)
 	case CS_UPGRADERANGE:
 		CG_SkillLevelsChanged();
 		break;
+	case CS_WEAPONBANK_OVERRIDES:
+		CG_ParseWeaponBankOverrides();
+		break;
 	case CS_SKYBOXORG:
 		CG_ParseSkyBox();
 		break;

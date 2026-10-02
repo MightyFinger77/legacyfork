@@ -1518,6 +1518,7 @@ void G_InitGame(int levelTime, int randomSeed, int restart, int etLegacyServer, 
 	Info_SetValueForKey(cs, "a4", va("%i", level.covertopsChargeTime[1]));
 	trap_SetConfigstring(CS_CHARGETIMES, cs);
 	trap_SetConfigstring(CS_FILTERCAMS, va("%i", g_filtercams.integer));
+	trap_SetConfigstring(CS_WEAPONBANK_OVERRIDES, "");
 
 	cs[0] = '\0';
 	Info_SetValueForKey(cs, "c0", team_maxSoldiers.string);

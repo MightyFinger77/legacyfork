@@ -1087,6 +1087,9 @@ struct gclient_s
 	vec3_t legacyDownedViewAngles;            ///< View direction at the moment player got downed.
 	qboolean legacyDownedViewAnglesValid;     ///< True when downed angles are valid for revive restore.
 	int legacyRevivesSinceRespawn;            ///< Number of revives since last full respawn.
+
+	/// legacyfork: Lua weapon→bank overrides (0 = use default weapBanks table)
+	byte weaponBankOverride[WP_NUM_WEAPONS];
 };
 
 /**
@@ -1764,6 +1767,12 @@ void AddMedicTeamBonus(gclient_t *client);
 void SetWolfSpawnWeapons(gclient_t *client);
 void limbo(gentity_t *ent, qboolean makeCorpse);
 void reinforce(gentity_t *ent);
+
+// g_weaponbank.c (legacyfork)
+void G_UpdateWeaponBankConfigString(void);
+qboolean G_SetWeaponBankOverride(int clientNum, int weapon, int bank);
+qboolean G_ClearWeaponBankOverride(int clientNum, int weapon);
+void G_ClearWeaponBankOverrides(int clientNum);
 
 // *LUA* & map configs g_sha1.c
 char *G_SHA1(const char *string);

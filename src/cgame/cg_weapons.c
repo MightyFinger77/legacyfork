@@ -3060,20 +3060,140 @@ WEAPON SELECTION
  */
 static qboolean CG_WeaponHasAmmo(weapon_t weapon)
 {
+	weaponTable_t *wt = GetWeaponTableData(weapon);
+
 	// certain weapons don't have ammo
-	if (/*!GetWeaponTableData(weapon)->useAmmo*/ (GetWeaponTableData(weapon)->type & WEAPON_TYPE_MELEE) || weapon == WP_PLIERS)
+	if ((wt->type & WEAPON_TYPE_MELEE) || weapon == WP_PLIERS)
+	{
+		return qtrue;
+	}
+
+	if (!wt->useAmmo)
+	{
+		return qtrue;
+	}
+
+	// Adrenaline is charge-gated and often granted via Lua without syringe ammo stocked
+	if (weapon == WP_MEDIC_ADRENALINE)
 	{
 		return qtrue;
 	}
 
 	// check if the weapon still have ammo
-	if (!(cg.predictedPlayerState.ammo[GetWeaponTableData(weapon)->ammoIndex]) &&
-	    !(cg.predictedPlayerState.ammoclip[GetWeaponTableData(weapon)->clipIndex]))
+	if (!(cg.predictedPlayerState.ammo[wt->ammoIndex]) &&
+	    !(cg.predictedPlayerState.ammoclip[wt->clipIndex]))
 	{
 		return qfalse;
 	}
 
 	return qtrue;
+}
+
+/**
+ * @brief Client whose bank overrides apply (local or followed).
+ */
+static int CG_BankClientNum(void)
+{
+	if (cg.snap)
+	{
+		return cg.snap->ps.clientNum;
+	}
+	return cg.clientNum;
+}
+
+#define MAX_BANK_WALK 32
+
+/**
+ * @brief Build effective weapon list for a bank: default table + Lua overrides.
+ */
+static int CG_CollectBankWeapons(int bank, int *list, int maxList)
+{
+	int n = 0, i, w, j;
+	int clientNum = CG_BankClientNum();
+
+	if (bank <= 0 || bank >= MAX_WEAP_BANKS_MP || !list || maxList <= 0)
+	{
+		return 0;
+	}
+
+	for (i = 0; i < MAX_WEAPS_IN_BANK_MP && weapBanksMultiPlayer[bank][i]; i++)
+	{
+		if (n >= maxList)
+		{
+			break;
+		}
+		list[n++] = weapBanksMultiPlayer[bank][i];
+	}
+
+	if (clientNum < 0 || clientNum >= MAX_CLIENTS)
+	{
+		return n;
+	}
+
+	for (w = WP_KNIFE; w < WP_NUM_WEAPONS && n < maxList; w++)
+	{
+		if (cgs.weaponBankOverride[clientNum][w] != bank)
+		{
+			continue;
+		}
+
+		for (j = 0; j < n; j++)
+		{
+			if (list[j] == w)
+			{
+				break;
+			}
+		}
+		if (j == n)
+		{
+			list[n++] = w;
+		}
+	}
+
+	return n;
+}
+
+/**
+ * @brief Parse CS_WEAPONBANK_OVERRIDES ("client:weapon:bank" tokens).
+ */
+void CG_ParseWeaponBankOverrides(void)
+{
+	const char *s = CG_ConfigString(CS_WEAPONBANK_OVERRIDES);
+	char       buf[MAX_INFO_STRING];
+	char       *token, *p;
+
+	Com_Memset(cgs.weaponBankOverride, 0, sizeof(cgs.weaponBankOverride));
+
+	if (!s || !s[0])
+	{
+		return;
+	}
+
+	Q_strncpyz(buf, s, sizeof(buf));
+	p = buf;
+
+	while ((token = COM_Parse(&p)) != NULL && token[0])
+	{
+		int clientNum = 0, weapon = 0, bank = 0;
+
+		if (sscanf(token, "%i:%i:%i", &clientNum, &weapon, &bank) != 3)
+		{
+			continue;
+		}
+		if (clientNum < 0 || clientNum >= MAX_CLIENTS)
+		{
+			continue;
+		}
+		if (!IS_VALID_WEAPON(weapon))
+		{
+			continue;
+		}
+		if (bank <= 0 || bank >= MAX_WEAP_BANKS_MP)
+		{
+			continue;
+		}
+		cgs.weaponBankOverride[clientNum][weapon] = (byte)bank;
+	}
 }
 
 /**
@@ -3134,6 +3254,7 @@ qboolean CG_WeaponSelectable(int weapon, qboolean playSound)
 int CG_WeaponIndex(int weapnum, int *bank, int *cycle)
 {
 	static int bnk, cyc;
+	int        clientNum, ov, list[MAX_BANK_WALK], count, i;
 
 	if (weapnum <= 0 || weapnum >= WP_NUM_WEAPONS)
 	{
@@ -3147,6 +3268,40 @@ int CG_WeaponIndex(int weapnum, int *bank, int *cycle)
 			*cycle = 0;
 		}
 		return 0;
+	}
+
+	clientNum = CG_BankClientNum();
+	if (clientNum >= 0 && clientNum < MAX_CLIENTS)
+	{
+		ov = cgs.weaponBankOverride[clientNum][weapnum];
+		if (ov > 0 && ov < MAX_WEAP_BANKS_MP)
+		{
+			count = CG_CollectBankWeapons(ov, list, MAX_BANK_WALK);
+			for (i = 0; i < count; i++)
+			{
+				if (list[i] == weapnum)
+				{
+					if (bank)
+					{
+						*bank = ov;
+					}
+					if (cycle)
+					{
+						*cycle = i;
+					}
+					return 1;
+				}
+			}
+			if (bank)
+			{
+				*bank = ov;
+			}
+			if (cycle)
+			{
+				*cycle = 0;
+			}
+			return 1;
+		}
 	}
 
 	for (bnk = 0; bnk < MAX_WEAP_BANKS_MP; bnk++)
@@ -3190,17 +3345,21 @@ int CG_WeaponIndex(int weapnum, int *bank, int *cycle)
  */
 static int getNextWeapInBank(int bank, int cycle)
 {
-	cycle++;
+	int list[MAX_BANK_WALK];
+	int count = CG_CollectBankWeapons(bank, list, MAX_BANK_WALK);
 
-	cycle = cycle % MAX_WEAPS_IN_BANK_MP;
-
-	if (weapBanksMultiPlayer[bank][cycle])          // return next weapon in bank if there is one
+	if (count <= 0)
 	{
-		return weapBanksMultiPlayer[bank][cycle];
+		return weapBanksMultiPlayer[bank][0];
 	}
 
-	// return first in bank
-	return weapBanksMultiPlayer[bank][0];
+	cycle++;
+	if (cycle < 0)
+	{
+		cycle = 0;
+	}
+	cycle = cycle % count;
+	return list[cycle];
 }
 
 /**
@@ -3230,24 +3389,33 @@ static int getNextWeapInBankBynum(int weapnum)
  */
 static int getPrevWeapInBank(int bank, int cycle)
 {
-	cycle--;
+	int list[MAX_BANK_WALK];
+	int count = CG_CollectBankWeapons(bank, list, MAX_BANK_WALK);
 
-	if (cycle < 0)
-	{
-		cycle = MAX_WEAPS_IN_BANK_MP - 1;
-	}
-
-	while (!weapBanksMultiPlayer[bank][cycle])
+	if (count <= 0)
 	{
 		cycle--;
-
 		if (cycle < 0)
 		{
 			cycle = MAX_WEAPS_IN_BANK_MP - 1;
 		}
+		while (!weapBanksMultiPlayer[bank][cycle])
+		{
+			cycle--;
+			if (cycle < 0)
+			{
+				cycle = MAX_WEAPS_IN_BANK_MP - 1;
+			}
+		}
+		return weapBanksMultiPlayer[bank][cycle];
 	}
 
-	return weapBanksMultiPlayer[bank][cycle];
+	cycle--;
+	if (cycle < 0)
+	{
+		cycle = count - 1;
+	}
+	return list[cycle];
 }
 
 /**
@@ -4361,64 +4529,79 @@ void CG_WeaponBank_f(void)
 
 	if (!cg.lastWeapSelInBank[bank])
 	{
-		newWeapon = weapBanksMultiPlayer[bank][0];
-		cycle    -= 1; // cycle up to first weap
+		int list[MAX_BANK_WALK];
+		int count = CG_CollectBankWeapons(bank, list, MAX_BANK_WALK);
+
+		newWeapon = count > 0 ? list[0] : weapBanksMultiPlayer[bank][0];
+		cycle     = -1; // cycle up to first weap via getNextWeapInBank
 	}
 	else
 	{
+		int list[MAX_BANK_WALK];
+		int count;
+
 		newWeapon = cg.lastWeapSelInBank[bank];
 		CG_WeaponIndex(newWeapon, &bank, &cycle);
+		count = CG_CollectBankWeapons(bank, list, MAX_BANK_WALK);
 
 		if (bank != curbank)
 		{
-			cycle -= 1;
+			cycle = -1;
 		}
 		else
 		{
-			if (cycle + 1 >= MAX_WEAPS_IN_BANK_MP)
+			// advance past current slot in the merged bank list
+			if (count <= 0)
 			{
 				cycle = 0;
 			}
-			else
+			else if (cycle + 1 >= count)
 			{
-				cycle += 1;
+				cycle = -1; // wrap: getNextWeapInBank will pick index 0
 			}
+			// else cycle stays at current; getNextWeapInBank(bank, cycle) yields next
 		}
 	}
 
-	for (i = 0; i < MAX_WEAPS_IN_BANK_MP; i++)
 	{
-		newWeapon = getNextWeapInBank(bank, cycle + i);
+		int list[MAX_BANK_WALK];
+		int count = CG_CollectBankWeapons(bank, list, MAX_BANK_WALK);
+		int limit = count > 0 ? count : MAX_WEAPS_IN_BANK_MP;
 
-		if (!cg_weapaltSwitches.integer && bank == curbank)
+		for (i = 0; i < limit; i++)
 		{
-			int curAlt = GetWeaponTableData(cg.weaponSelect)->weapAlts;
-			int newAlt = GetWeaponTableData(newWeapon)->weapAlts;
+			newWeapon = getNextWeapInBank(bank, cycle + i);
 
-			if ((curAlt && newWeapon == curAlt) || (newAlt && newAlt == cg.weaponSelect))
+			if (!cg_weapaltSwitches.integer && bank == curbank)
 			{
-				continue;
+				int curAlt = GetWeaponTableData(cg.weaponSelect)->weapAlts;
+				int newAlt = GetWeaponTableData(newWeapon)->weapAlts;
+
+				if ((curAlt && newWeapon == curAlt) || (newAlt && newAlt == cg.weaponSelect))
+				{
+					continue;
+				}
 			}
-		}
 
-		if (CG_WeaponSelectable(newWeapon, qtrue))
-		{
-			break;
-		}
-
-		if (GetWeaponTableData(newWeapon)->type & WEAPON_TYPE_RIFLE)
-		{
-			if (cg_weapaltSwitches.integer && CG_WeaponSelectable(GetWeaponTableData(newWeapon)->weapAlts, qtrue))
+			if (CG_WeaponSelectable(newWeapon, qtrue))
 			{
-				newWeapon = GetWeaponTableData(newWeapon)->weapAlts;
 				break;
 			}
-		}
-	}
 
-	if (i == MAX_WEAPS_IN_BANK_MP)
-	{
-		return;
+			if (GetWeaponTableData(newWeapon)->type & WEAPON_TYPE_RIFLE)
+			{
+				if (cg_weapaltSwitches.integer && CG_WeaponSelectable(GetWeaponTableData(newWeapon)->weapAlts, qtrue))
+				{
+					newWeapon = GetWeaponTableData(newWeapon)->weapAlts;
+					break;
+				}
+			}
+		}
+
+		if (i == limit)
+		{
+			return;
+		}
 	}
 
 	CG_FinishWeaponChange(cg.weaponSelect, newWeapon);

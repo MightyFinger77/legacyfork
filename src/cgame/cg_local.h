@@ -1142,8 +1142,12 @@ typedef struct
 	char compatPath[MAX_OSPATH];
 } demoBackwardsCompat_t;
 
+#ifndef MAX_WEAP_BANKS_MP
 #define MAX_WEAP_BANKS_MP          10
+#endif
+#ifndef MAX_WEAPS_IN_BANK_MP
 #define MAX_WEAPS_IN_BANK_MP       18
+#endif
 #define MAX_WEAP_BANK_SWITCH_ORDER 4
 
 #define MAX_BACKUP_STATES (CMD_BACKUP_ETL + 2)
@@ -2558,6 +2562,9 @@ typedef struct cgs_s
 
 	clientInfo_t clientinfo[MAX_CLIENTS];
 
+	/// legacyfork: per-client weapon→bank overrides (0 = default weapBanks)
+	byte weaponBankOverride[MAX_CLIENTS][WP_NUM_WEAPONS];
+
 	// colors
 	vec4_t customCrosshairDotOutlineColor;
 	vec4_t customCrosshairDotColor;
@@ -3402,6 +3409,7 @@ void CG_ShaderStateChanged(void);
 void CG_ChargeTimesChanged(void);
 void CG_TeamRestrictionsChanged(void);
 void CG_SkillLevelsChanged(void);
+void CG_ParseWeaponBankOverrides(void);
 void CG_LoadVoiceChats(void);
 void CG_PlayBufferedVoiceChats(void);
 void CG_AddToTeamChat(const char *str, int clientnum);

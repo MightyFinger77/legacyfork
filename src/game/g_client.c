@@ -3547,6 +3547,8 @@ void ClientDisconnect(int clientNum)
 	G_LuaHook_ClientDisconnect(clientNum);
 #endif
 
+	G_ClearWeaponBankOverrides(clientNum);
+
 #ifdef FEATURE_OMNIBOT
 	Bot_Event_ClientDisConnected(clientNum);
 #endif
